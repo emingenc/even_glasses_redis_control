@@ -1,2 +1,2 @@
 redis>=5.2.0
-even_glasses>=0.1.10
+even_glasses>=0.1.11
