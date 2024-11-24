@@ -1,5 +1,6 @@
 import json
 import logging
+import base64
 import redis.asyncio as aioredis
 
 from even_glasses.models import (
@@ -165,6 +166,22 @@ class CommandSender:
             args=[],
             kwargs={"status": status_enum.value}
         )
+
+    async def send_image_command(self, image_path: str):
+        """Send an image to the glasses."""
+        try:
+            with open(image_path, 'rb') as image_file:
+                image_data = image_file.read()
+            # Base64 encode the image data to make it JSON serializable
+            image_base64 = base64.b64encode(image_data).decode('utf-8')
+            await self.send_command(
+                command_name="send_image",
+                args=[],
+                kwargs={"image_data": image_base64}
+            )
+            logger.info(f"Published send_image command to Redis with image from {image_path}")
+        except Exception as e:
+            logger.error(f"Failed to send image command: {e}")
 
     async def close(self):
         """Close the Redis connection."""

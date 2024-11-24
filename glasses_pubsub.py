@@ -1,12 +1,14 @@
 import json
 import asyncio
 import logging
+import base64
 import redis.asyncio as aioredis
 from even_glasses.bluetooth_manager import GlassesManager
 from even_glasses.commands import (
     send_text,
     send_rsvp,
     send_notification,
+    send_image,
     apply_silent_mode,
     apply_brightness,
     apply_headup_angle,
@@ -39,6 +41,7 @@ COMMAND_MAPPING = {
     "send_text": send_text,
     "send_rsvp": send_rsvp,
     "send_notification": send_notification,
+    "send_image": send_image,  # Add send_image to COMMAND_MAPPING
     "apply_silent_mode": apply_silent_mode,
     "apply_brightness": apply_brightness,
     "apply_headup_angle": apply_headup_angle,
@@ -71,6 +74,10 @@ COMMAND_DESERIALIZERS: Dict[str, Dict[str, Callable[[Any], Any]]] = {
     },
     "hide_dashboard": {
         "position": DashboardPosition
+    },
+    "send_image": {
+        # Deserialize image_data from Base64 to bytes
+        "image_data": lambda data: base64.b64decode(data.encode('utf-8'))
     },
     # Add more commands and their deserializers here if needed
 }
@@ -117,7 +124,7 @@ async def handle_command(manager: GlassesManager, message: str):
                             # Enum deserialization
                             kwargs[param] = deserializer(raw_value)
                         elif callable(deserializer):
-                            # Pydantic model deserialization
+                            # Custom deserialization (e.g., Base64 decoding)
                             kwargs[param] = deserializer(raw_value)
                         else:
                             # Fallback for any other type
@@ -125,7 +132,7 @@ async def handle_command(manager: GlassesManager, message: str):
                     except Exception as e:
                         logger.error(f"Failed to deserialize parameter '{param}' for command '{command_name}': {e}")
                         return  # Skip executing the command if deserialization fails
-            
+                
             # Execute the command function with the deserialized arguments
             result = await command_func(manager, *args, **kwargs)
             logger.info(f"Executed command '{command_name}' with result: {result}")
