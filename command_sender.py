@@ -2,6 +2,7 @@ import json
 import logging
 import base64
 import redis.asyncio as aioredis
+import asyncio
 
 from even_glasses.models import (
     SilentModeStatus,
@@ -20,19 +21,35 @@ COMMAND_CHANNEL = "commands"
 class CommandSender:
     def __init__(self, redis_url: str = "redis://localhost"):
         self.redis_url = redis_url
-        self.redis_client = aioredis.from_url(self.redis_url, decode_responses=True)
+        self.redis_client = None
+        self.loop = None
 
     async def connect(self):
-        """Initialize the Redis connection."""
+        """Initialize the Redis connection with a new event loop if needed."""
         try:
+            # Get or create event loop
+            try:
+                self.loop = asyncio.get_event_loop()
+            except RuntimeError:
+                self.loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(self.loop)
+            
+            # Create Redis client if needed
+            if not self.redis_client:
+                self.redis_client = aioredis.from_url(
+                    self.redis_url, 
+                    decode_responses=True
+                )
+            
             await self.redis_client.ping()
             logger.info("Connected to Redis server.")
+            
         except Exception as e:
             logger.error(f"Failed to connect to Redis server: {e}")
             raise
 
     async def send_command(self, command_name: str, args=None, kwargs=None):
-        """Publish a command to the Redis COMMAND_CHANNEL."""
+        """Publish a command to Redis with connection retry."""
         if args is None:
             args = []
         if kwargs is None:
@@ -45,10 +62,20 @@ class CommandSender:
         }
 
         try:
-            await self.redis_client.publish(COMMAND_CHANNEL, json.dumps(command_message))
+            # Reconnect if client is closed
+            if not self.redis_client:
+                await self.connect()
+                
+            await self.redis_client.publish(
+                COMMAND_CHANNEL, 
+                json.dumps(command_message)
+            )
             logger.info(f"Published command to Redis: {command_message}")
+            
         except Exception as e:
             logger.error(f"Failed to publish command to Redis: {e}")
+            # Try to reconnect on next command
+            self.redis_client = None
 
     async def send_text_command(self, text_message: str, duration: int = 5):
         """Send a text message to the glasses."""

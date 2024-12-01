@@ -26,7 +26,7 @@
 
 Open a terminal and run:
 ```bash
-docker run --name redis-server -p 6379:6379 -d redis
+docker run --name g1-redis-server -p 6379:6379 -d redis
 
 ```
 
